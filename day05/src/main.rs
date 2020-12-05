@@ -7,16 +7,33 @@ fn main() -> io::Result<()> {
     let file = File::open("./input.txt")?;
     let reader = BufReader::new(file);
 
-    let result = reader
+    let mut seat_ids: Vec<usize> = reader
         .lines()
         .map(|line| {
             let line = line.expect("Unable to read line");
             seat_id(&line)
         })
-        .max()
-        .expect("Did not find max seat id");
+        .collect();
 
-    println!("Part 1: {}", result);
+    seat_ids.sort();
+
+    let part_1 = seat_ids.last().unwrap();
+    println!("Part 1: {}", part_1);
+
+    let offset = *seat_ids.first().unwrap();
+    let part_2 = seat_ids
+        .iter()
+        .enumerate()
+        .find_map(|(i, seat_id)| {
+            if *seat_id - i != offset {
+                Some(seat_id - 1)
+            } else {
+                None
+            }
+        })
+        .unwrap();
+
+    println!("Part 2: {}", part_2);
 
     Ok(())
 }
