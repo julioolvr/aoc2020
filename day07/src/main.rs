@@ -28,13 +28,17 @@ fn main() {
                 .into();
 
             for bag_captures in CONTAINED_BAGS_REGEX.captures_iter(&line) {
+                let bag_count = &bag_captures[1];
                 let bag_name = &bag_captures[2];
-                bags.add(&container_bag_name, bag_name);
+                bags.add(&container_bag_name, bag_name, bag_count.parse().unwrap());
             }
         });
 
     let part_1 = bags.count_total_to("shiny gold");
+    let part_2 = bags.count_bags_from("shiny gold");
+
     println!("Part 1: {}", part_1);
+    println!("Part 2: {}", part_2);
 }
 
 lazy_static! {
@@ -45,25 +49,43 @@ lazy_static! {
 }
 
 struct BagRules {
-    bag_rules: HashMap<String, HashSet<String>>,
+    bag_rules: HashMap<String, HashMap<String, usize>>,
+    bag_rules_inv: HashMap<String, HashSet<String>>,
 }
 
 impl BagRules {
     fn new() -> BagRules {
         BagRules {
             bag_rules: HashMap::new(),
+            bag_rules_inv: HashMap::new(),
         }
     }
 
-    fn add(&mut self, from: &str, to: &str) {
+    fn add(&mut self, from: &str, to: &str, count: usize) {
         self.bag_rules
+            .entry(from.into())
+            .or_insert(HashMap::new())
+            .insert(to.into(), count);
+
+        self.bag_rules_inv
             .entry(to.into())
             .or_insert(HashSet::new())
             .insert(from.into());
     }
 
-    fn collect_container_bags(&self, to: &str) -> HashSet<String> {
+    fn count_bags_from(&self, from: &str) -> usize {
         self.bag_rules
+            .get(from)
+            .map(|edge| {
+                edge.iter()
+                    .map(|(k, v)| self.count_bags_from(k) * v + v)
+                    .sum()
+            })
+            .unwrap_or(0)
+    }
+
+    fn collect_container_bags(&self, to: &str) -> HashSet<String> {
+        self.bag_rules_inv
             .get(to)
             .map(|set| {
                 set.iter().fold(set.clone(), |acc, container| {
@@ -77,20 +99,5 @@ impl BagRules {
 
     fn count_total_to(&self, to: &str) -> usize {
         self.collect_container_bags(to).len()
-
-        // let mut potential_containers = HashSet::new();
-        // let mut parents = self.collect_container_bags(to);
-
-        // while !parents.is_empty() {
-        //     potential_containers = potential_containers.union(&parents).cloned().collect();
-        //     parents = parents
-        //         .iter()
-        //         .map(|parent| self.collect_container_bags(parent))
-        //         .fold(HashSet::new(), |acc, containers| {
-        //             acc.union(&containers).cloned().collect()
-        //         });
-        // }
-
-        // potential_containers.len()
     }
 }
