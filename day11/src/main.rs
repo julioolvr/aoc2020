@@ -6,23 +6,61 @@ use std::{
 fn main() {
     let file = File::open("./input.txt").expect("Unable to open file");
     let reader = BufReader::new(file);
-    let mut seating_area = SeatingArea::parse(reader.lines().map(|line| line.unwrap()));
+    let lines: Vec<String> = reader.lines().map(|line| line.unwrap()).collect();
 
+    let mut seating_area = SeatingArea::parse(lines.iter());
     seating_area.simulate();
-
     let part_1 = seating_area.occupied_seats();
+    assert_eq!(part_1, 2283);
     println!("Part 1: {}", part_1);
+
+    let mut seating_area = SeatingArea::parse(lines.iter());
+    seating_area.simulate_with_sight();
+    let part_2 = seating_area.occupied_seats();
+    assert_eq!(part_2, 2054);
+    println!("Part 2: {}", part_2);
+}
+
+struct Coordinates {
+    x: isize,
+    y: isize,
+}
+
+impl Coordinates {
+    fn new(x: usize, y: usize) -> Coordinates {
+        Coordinates {
+            x: x as isize,
+            y: y as isize,
+        }
+    }
+
+    fn from_index(index: usize, row_length: usize) -> Coordinates {
+        let (x, y) = (index % row_length, index / row_length);
+        Coordinates::new(x, y)
+    }
+
+    fn to_index(&self, row_length: usize) -> usize {
+        (self.y * row_length as isize + self.x) as usize
+    }
+
+    fn move_towards(&mut self, direction: (isize, isize)) {
+        self.x += direction.0;
+        self.y += direction.1;
+    }
+
+    fn within(&self, width: usize, height: usize) -> bool {
+        self.x >= 0 && self.x < width as isize && self.y >= 0 && self.y < height as isize
+    }
 }
 
 #[derive(Clone)]
 enum Seat {
-    Floor,
     Free,
     Occupied,
 }
 
 struct SeatingArea {
-    seats: Vec<Seat>,
+    seats: Vec<Option<Seat>>,
     row_length: usize,
 }
 
@@ -36,11 +74,11 @@ impl SeatingArea {
                 row_length = line.len();
                 line.chars()
                     .map(|c| match c {
-                        '.' => Seat::Floor,
-                        'L' => Seat::Free,
+                        '.' => None,
+                        'L' => Some(Seat::Free),
                         other => panic!("Invalid seat character: `{}`", other),
                     })
-                    .collect::<Vec<Seat>>()
+                    .collect::<Vec<Option<Seat>>>()
             })
             .collect();
 
@@ -59,13 +97,13 @@ impl SeatingArea {
             .iter_mut()
             .enumerate()
             .for_each(|(i, seat)| match seat {
-                Seat::Free if self.should_occupy(i) => {
+                Some(Seat::Free) if self.should_occupy(i) => {
                     changed = true;
-                    *seat = Seat::Occupied;
+                    *seat = Some(Seat::Occupied);
                 }
-                Seat::Occupied if self.should_free(i) => {
+                Some(Seat::Occupied) if self.should_free(i) => {
                     changed = true;
-                    *seat = Seat::Free;
+                    *seat = Some(Seat::Free);
                 }
                 _ => {}
             });
@@ -75,71 +113,119 @@ impl SeatingArea {
     }
 
     fn should_occupy(&self, index: usize) -> bool {
-        !self
-            .neighbors(index)
-            .iter()
-            .any(|seat| matches!(seat, Seat::Occupied))
+        self.occupied_neighbors(index).is_empty()
     }
 
     fn should_free(&self, index: usize) -> bool {
-        self.neighbors(index)
+        self.occupied_neighbors(index).len() >= 4
+    }
+
+    fn occupied_neighbors(&self, index: usize) -> Vec<&Seat> {
+        self.visible_occupied_neighbors(index, Some(1))
+    }
+
+    fn simulate_with_sight(&mut self) {
+        while self.simulate_step_with_sight() {}
+    }
+
+    fn simulate_step_with_sight(&mut self) -> bool {
+        let mut next_state = self.seats.clone();
+        let mut changed = false;
+
+        next_state
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, seat)| match seat {
+                Some(Seat::Free) if self.should_occupy_by_visibility(i) => {
+                    changed = true;
+                    *seat = Some(Seat::Occupied);
+                }
+                Some(Seat::Occupied) if self.should_free_by_visibility(i) => {
+                    changed = true;
+                    *seat = Some(Seat::Free);
+                }
+                _ => {}
+            });
+
+        self.seats = next_state;
+        changed
+    }
+
+    fn should_occupy_by_visibility(&self, index: usize) -> bool {
+        self.visible_occupied_neighbors(index, None).is_empty()
+    }
+
+    fn should_free_by_visibility(&self, index: usize) -> bool {
+        self.visible_occupied_neighbors(index, None).len() >= 5
+    }
+
+    fn visible_occupied_neighbors(&self, index: usize, limit: Option<usize>) -> Vec<&Seat> {
+        let directions = [
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+        ];
+
+        directions
             .iter()
-            .filter(|seat| matches!(seat, Seat::Occupied))
-            .count()
-            >= 4
+            .map(|direction| self.seat_in_direction(index, *direction, limit))
+            .filter_map(|seat| match seat {
+                Some(Seat::Occupied) => seat,
+                _ => None,
+            })
+            .collect()
     }
 
-    fn neighbors(&self, index: usize) -> Vec<&Seat> {
-        let (x, y) = self.to_coordinates(index);
-        let mut neighbors = vec![];
+    fn seat_in_direction(
+        &self,
+        index: usize,
+        direction: (isize, isize),
+        limit: Option<usize>,
+    ) -> Option<&Seat> {
+        let mut coordinates = Coordinates::from_index(index, self.columns());
+        let mut distance = 1;
+        coordinates.move_towards(direction);
 
-        if y > 0 {
-            if x > 0 {
-                neighbors.push(self.seats.get(self.from_coordinates(x - 1, y - 1)).unwrap());
+        while coordinates.within(self.columns(), self.rows())
+            && limit.map_or(true, |n| distance <= n)
+        {
+            let seat = self.seat_at(&coordinates);
+
+            if seat.is_some() {
+                return seat;
             }
 
-            neighbors.push(self.seats.get(self.from_coordinates(x, y - 1)).unwrap());
-
-            if x < self.row_length - 1 {
-                neighbors.push(self.seats.get(self.from_coordinates(x + 1, y - 1)).unwrap());
-            }
+            distance += 1;
+            coordinates.move_towards(direction);
         }
 
-        if x > 0 {
-            neighbors.push(self.seats.get(self.from_coordinates(x - 1, y)).unwrap());
-        }
-
-        if x < self.row_length - 1 {
-            neighbors.push(self.seats.get(self.from_coordinates(x + 1, y)).unwrap());
-        }
-
-        if y < (self.seats.len() / self.row_length) - 1 {
-            if x > 0 {
-                neighbors.push(self.seats.get(self.from_coordinates(x - 1, y + 1)).unwrap());
-            }
-
-            neighbors.push(self.seats.get(self.from_coordinates(x, y + 1)).unwrap());
-
-            if x < self.row_length - 1 {
-                neighbors.push(self.seats.get(self.from_coordinates(x + 1, y + 1)).unwrap());
-            }
-        }
-
-        neighbors
+        None
     }
 
-    fn to_coordinates(&self, index: usize) -> (usize, usize) {
-        (index % self.row_length, index / self.row_length)
+    fn seat_at(&self, coordinates: &Coordinates) -> Option<&Seat> {
+        self.seats
+            .get(coordinates.to_index(self.columns()))
+            .unwrap()
+            .as_ref()
     }
 
-    fn from_coordinates(&self, x: usize, y: usize) -> usize {
-        y * self.row_length + x
+    fn rows(&self) -> usize {
+        self.seats.len() / self.row_length
+    }
+
+    fn columns(&self) -> usize {
+        self.row_length
     }
 
     fn occupied_seats(&self) -> usize {
         self.seats
             .iter()
-            .filter(|seat| matches!(seat, Seat::Occupied))
+            .filter(|seat| matches!(seat, Some(Seat::Occupied)))
             .count()
     }
 }
