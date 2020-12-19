@@ -20,6 +20,18 @@ fn main() {
 
     let part_1 = lines.filter(|line| ruleset.validate(line)).count();
     println!("Part 1: {}", part_1);
+
+    // input2.txt is the same as input.txt but I manually expanded rules 8 and 11 a few times because yolo
+    let file = File::open("./input2.txt").expect("Unable to open file");
+    let reader = BufReader::new(file);
+    let mut lines = reader.lines().map(|line| line.unwrap());
+    let lines = lines.by_ref();
+
+    let rule_definitions = lines.take_while(|line| line != "");
+    let ruleset = RuleSet::parse(rule_definitions.collect());
+
+    let part_2 = lines.filter(|line| ruleset.validate(line)).count();
+    println!("Part 2: {}", part_2);
 }
 
 struct RuleSet {
