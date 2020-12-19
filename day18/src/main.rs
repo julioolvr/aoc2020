@@ -1,14 +1,22 @@
 use std::{
     fs::File,
     io::{BufRead, BufReader},
+    iter::Peekable,
 };
 
 fn main() {
     let file = File::open("./input.txt").expect("Unable to open file");
     let reader = BufReader::new(file);
+    let operations: Vec<Vec<Token>> = reader.lines().map(|line| parse(&line.unwrap())).collect();
 
-    let part_1: usize = reader.lines().map(|line| run(&parse(&line.unwrap()))).sum();
+    let part_1: usize = operations.iter().map(|operation| run(operation)).sum();
     println!("Part 1: {}", part_1);
+
+    let part_2: usize = operations
+        .iter()
+        .map(|operation| run_with_precedence(operation))
+        .sum();
+    println!("Part 2: {}", part_2);
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -84,6 +92,81 @@ fn run_recursive<'a>(tokens: &mut impl Iterator<Item = &'a Token>) -> usize {
     result
 }
 
+#[derive(PartialEq, PartialOrd, Debug)]
+enum Precedence {
+    None,
+    Multiplication,
+    Addition,
+}
+
+fn run_with_precedence(tokens: &Vec<Token>) -> usize {
+    let mut instructions: Vec<Token> = vec![];
+    let mut tokens = tokens.iter().peekable();
+
+    parse_tokens(&mut tokens, &mut instructions, Precedence::None);
+
+    let mut stack: Vec<usize> = vec![];
+
+    for instruction in instructions {
+        match instruction {
+            Token::Number(n) => stack.push(n),
+            Token::Plus => {
+                let b = stack.pop().unwrap();
+                let a = stack.pop().unwrap();
+                stack.push(a + b);
+            }
+            Token::Star => {
+                let b = stack.pop().unwrap();
+                let a = stack.pop().unwrap();
+                stack.push(a * b);
+            }
+            _ => unreachable!(), // Parenthesis don't exist at this point
+        }
+    }
+
+    stack.pop().unwrap()
+}
+
+// For such simple expressions we can reuse the tokens as instructions
+type Instruction = Token;
+
+fn parse_tokens<'a>(
+    tokens: &mut Peekable<impl Iterator<Item = &'a Token>>,
+    instructions: &mut Vec<Instruction>,
+    precedence: Precedence,
+) {
+    while let Some(token) = tokens.peek() {
+        match token {
+            Token::LeftParen => {
+                tokens.next();
+                parse_tokens(tokens, instructions, Precedence::None);
+                tokens.next(); // Consume right paren
+            }
+            Token::Number(_) => {
+                let number = tokens.next().unwrap();
+                instructions.push(*number);
+            }
+            other => panic!("Unexpected token {:?}", other),
+        }
+
+        while let Some(token) = tokens.peek() {
+            match token {
+                Token::Plus if precedence <= Precedence::Addition => {
+                    tokens.next();
+                    parse_tokens(tokens, instructions, Precedence::Addition);
+                    instructions.push(Token::Plus);
+                }
+                Token::Star if precedence <= Precedence::Multiplication => {
+                    tokens.next();
+                    parse_tokens(tokens, instructions, Precedence::Multiplication);
+                    instructions.push(Token::Star);
+                }
+                _ => return,
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +195,27 @@ mod tests {
         assert_eq!(7, run(&parse("1 + (2 * 3)")));
         assert_eq!(9, run(&parse("(1 + 2) * 3")));
         assert_eq!(51, run(&parse("1 + (2 * 3) + (4 * (5 + 6))")));
+    }
+
+    #[test]
+    fn test_run_with_precedence() {
+        assert_eq!(132, run_with_precedence(&parse("(9 * 8 + 6) + 6")));
+        assert_eq!(
+            51,
+            run_with_precedence(&parse("1 + (2 * 3) + (4 * (5 + 6))"))
+        );
+        assert_eq!(46, run_with_precedence(&parse("2 * 3 + (4 * 5)")));
+        assert_eq!(
+            1445,
+            run_with_precedence(&parse("5 + (8 * 3 + 9 + 3 * 4 * 3)"))
+        );
+        assert_eq!(
+            669060,
+            run_with_precedence(&parse("5 * 9 * (7 * 3 * 3 + 9 * 3 + (8 + 6 * 4))"))
+        );
+        assert_eq!(
+            23340,
+            run_with_precedence(&parse("((2 + 4 * 9) * (6 + 9 * 8 + 6) + 6) + 2 + 4 * 2"))
+        );
     }
 }
