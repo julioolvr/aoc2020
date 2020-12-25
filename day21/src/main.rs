@@ -59,6 +59,36 @@ fn main() {
         .sum();
 
     println!("Part 1: {}", part_1);
+
+    let mut sorted_ingredients_by_allergen: Vec<(String, HashSet<String>)> =
+        ingredients_by_allergens.into_iter().collect();
+
+    sorted_ingredients_by_allergen.sort_by_key(|(_, ingredients)| ingredients.len());
+
+    let mut unavailable_ingredients = ingredients_without_allergens;
+    let mut allergen_by_ingredient: Vec<(String, String)> = vec![];
+
+    for (allergen, ingredients) in sorted_ingredients_by_allergen {
+        let allergen_ingredient = ingredients
+            .difference(&unavailable_ingredients)
+            .next()
+            .unwrap()
+            .clone();
+
+        unavailable_ingredients.insert(allergen_ingredient.clone());
+
+        allergen_by_ingredient.push((allergen, allergen_ingredient.clone()));
+    }
+
+    allergen_by_ingredient.sort_by_key(|(allergen, _)| allergen.clone());
+
+    let part_2 = allergen_by_ingredient
+        .iter()
+        .map(|(_, ingredient)| ingredient.clone())
+        .collect::<Vec<String>>()
+        .join(",");
+
+    println!("Part 2: {:?}", part_2);
 }
 
 fn parse_food(food: &str) -> (Vec<String>, Vec<String>) {
