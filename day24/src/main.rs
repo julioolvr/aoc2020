@@ -57,6 +57,38 @@ fn main() {
         });
 
     println!("Part 1: {}", flipped_tiles.len());
+
+    for _ in 0..100 {
+        let mut updated_tiles = flipped_tiles.clone();
+
+        for flipped_tile in &flipped_tiles {
+            let neighbors = coordinate_neighbors(flipped_tile);
+            let flipped_neighbors = neighbors.intersection(&flipped_tiles).count();
+
+            if flipped_neighbors == 0 || flipped_neighbors > 2 {
+                updated_tiles.remove(&flipped_tile);
+            }
+
+            for neighbor in neighbors {
+                let neighbor_neighbors = coordinate_neighbors(&neighbor);
+                let flipped_neighbors = neighbor_neighbors.intersection(&flipped_tiles).count();
+
+                if flipped_tiles.contains(&neighbor) {
+                    if flipped_neighbors == 0 || flipped_neighbors > 2 {
+                        updated_tiles.remove(&neighbor);
+                    }
+                } else {
+                    if flipped_neighbors == 2 {
+                        updated_tiles.insert(neighbor);
+                    }
+                }
+            }
+        }
+
+        flipped_tiles = updated_tiles;
+    }
+
+    println!("Part 2: {}", flipped_tiles.len());
 }
 
 enum Direction {
@@ -66,4 +98,18 @@ enum Direction {
     West,
     NorthWest,
     NorthEast,
+}
+
+fn coordinate_neighbors(coords: &(isize, isize)) -> HashSet<(isize, isize)> {
+    [
+        (coords.0 + 1, coords.1),
+        (coords.0 - 1, coords.1),
+        (coords.0, coords.1 + 1),
+        (coords.0 - 1, coords.1 + 1),
+        (coords.0 + 1, coords.1 - 1),
+        (coords.0, coords.1 - 1),
+    ]
+    .iter()
+    .copied()
+    .collect()
 }
