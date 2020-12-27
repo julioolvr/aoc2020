@@ -3,45 +3,10 @@ static INPUT: &[usize] = &[2, 8, 4, 5, 7, 3, 9, 6, 1];
 
 fn main() {
     let mut cups: Vec<usize> = INPUT.into();
-    let mut current = 0;
 
-    let max = *cups.iter().max().unwrap();
-    let min = *cups.iter().min().unwrap();
+    let part_1_solution = solve(cups.clone(), 100);
 
-    for _ in 0..100 {
-        let current_value = cups[current];
-        let max_index = *vec![current + 3, cups.len() - 1].iter().min().unwrap();
-        let mut removed: Vec<usize> = cups.drain(current + 1..=max_index).collect();
-
-        if max_index < current + 3 {
-            removed.extend(cups.drain(0..current + 3 - max_index));
-        }
-
-        let mut destination_value = current_value - 1;
-
-        while !cups.contains(&destination_value) {
-            destination_value = if destination_value > min {
-                destination_value - 1
-            } else {
-                max
-            }
-        }
-
-        let destination_index = cups.iter().position(|n| *n == destination_value).unwrap();
-        cups.splice(
-            destination_index + 1..destination_index + 1,
-            removed.iter().copied(),
-        );
-
-        let current_new_index = cups.iter().position(|n| *n == current_value).unwrap();
-        current = current_new_index + 1;
-
-        if current >= cups.len() {
-            current = 0;
-        }
-    }
-
-    let part_1 = cups
+    let part_1 = part_1_solution
         .iter()
         .cycle()
         .skip_while(|n| **n != 1)
@@ -51,5 +16,77 @@ fn main() {
         .collect::<Vec<String>>()
         .join("");
 
+    assert_eq!(part_1, "26354798");
     println!("Part 1: {}", part_1);
+
+    for n in *cups.iter().max().unwrap() + 1..=1_000_000 {
+        cups.push(n);
+    }
+
+    let part_2_solution = solve(cups, 10_000_000);
+    let part_2: usize = part_2_solution
+        .iter()
+        .cycle()
+        .skip_while(|n| **n != 1)
+        .skip(1)
+        .take(2)
+        .product();
+
+    println!("Part 2: {}", part_2);
+}
+
+fn solve(cups: Vec<usize>, loops: usize) -> Vec<usize> {
+    let mut cups_next: Vec<Option<usize>> = vec![None; cups.len()];
+
+    for (i, cup) in cups.iter().enumerate() {
+        if i < cups.len() - 1 {
+            cups_next[*cup - 1] = Some(cups[i + 1])
+        }
+    }
+    cups_next[*cups.last().unwrap() - 1] = Some(cups[0]);
+
+    let mut cups_next: Vec<usize> = cups_next
+        .into_iter()
+        .collect::<Option<Vec<usize>>>()
+        .unwrap();
+
+    let mut current = cups[0];
+
+    let max = *cups.iter().max().unwrap();
+    let min = *cups.iter().min().unwrap();
+
+    for _ in 0..loops {
+        let mut removed = vec![];
+        removed.push(cups_next[current - 1]);
+        removed.push(cups_next[*removed.last().unwrap() - 1]);
+        removed.push(cups_next[*removed.last().unwrap() - 1]);
+
+        cups_next[current - 1] = cups_next[*removed.last().unwrap() - 1];
+
+        let mut destination = current;
+
+        loop {
+            destination = if destination > min {
+                destination - 1
+            } else {
+                max
+            };
+
+            if !removed.contains(&destination) {
+                break;
+            }
+        }
+
+        cups_next[*removed.last().unwrap() - 1] = cups_next[destination - 1];
+        cups_next[destination - 1] = *removed.first().unwrap();
+        current = cups_next[current - 1];
+    }
+
+    let mut result: Vec<usize> = vec![cups[0]];
+
+    for i in 1..cups_next.len() {
+        result.push(cups_next[result[i - 1] - 1]);
+    }
+
+    result
 }
